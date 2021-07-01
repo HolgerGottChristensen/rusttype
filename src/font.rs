@@ -6,6 +6,7 @@ use alloc::sync::Arc;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 use core::fmt;
+use owned_ttf_parser::{OwnedFace, FaceParsingError, AsFaceRef};
 
 /// A single font. This may or may not own the font data.
 ///
@@ -29,8 +30,8 @@ use core::fmt;
 /// ```
 #[derive(Clone)]
 pub enum Font<'a> {
-    Ref(Arc<owned_ttf_parser::Font<'a>>),
-    Owned(Arc<owned_ttf_parser::OwnedFont>),
+    Ref(Arc<owned_ttf_parser::Face<'a>>),
+    Owned(Arc<owned_ttf_parser::OwnedFace>),
 }
 
 impl fmt::Debug for Font<'_> {
@@ -51,8 +52,15 @@ impl Font<'_> {
     ///
     /// Returns `None` for invalid data.
     pub fn try_from_bytes_and_index(bytes: &[u8], index: u32) -> Option<Font<'_>> {
-        let inner = Arc::new(owned_ttf_parser::Font::from_data(bytes, index)?);
-        Some(Font::Ref(inner))
+        let inner = owned_ttf_parser::Face::from_slice(bytes, index);
+        match inner {
+            Ok(face) => {
+                Some(Font::Ref(Arc::new(face)))
+            }
+            Err(_) => {
+                None
+            }
+        }
     }
 
     /// Creates a Font from owned font data.
@@ -66,18 +74,26 @@ impl Font<'_> {
     ///
     /// Returns `None` for invalid data.
     pub fn try_from_vec_and_index(data: Vec<u8>, index: u32) -> Option<Font<'static>> {
-        let inner = Arc::new(owned_ttf_parser::OwnedFont::from_vec(data, index)?);
-        Some(Font::Owned(inner))
+        let inner = owned_ttf_parser::OwnedFace::from_vec(data, index);
+        match inner {
+            Ok(owned_face) => {
+                Some(Font::Owned(Arc::new(owned_face)))
+            }
+            Err(_) => {
+                None
+            }
+        }
+
     }
 }
 
 impl<'font> Font<'font> {
     #[inline]
-    pub(crate) fn inner(&self) -> &owned_ttf_parser::Font<'_> {
-        use owned_ttf_parser::AsFontRef;
+    pub fn inner(&self) -> &owned_ttf_parser::Face<'_> {
+        use owned_ttf_parser::AsFaceRef;
         match self {
             Self::Ref(f) => f,
-            Self::Owned(f) => f.as_font(),
+            Self::Owned(f) => f.as_face_ref(),
         }
     }
 
