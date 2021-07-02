@@ -30,8 +30,8 @@ use owned_ttf_parser::{OwnedFace, FaceParsingError, AsFaceRef};
 /// ```
 #[derive(Clone)]
 pub enum Font<'a> {
-    Ref(Arc<owned_ttf_parser::Face<'a>>),
-    Owned(Arc<owned_ttf_parser::OwnedFace>),
+    Ref(Arc<owned_ttf_parser::Face<'a>>, Option<VMetrics>),
+    Owned(Arc<owned_ttf_parser::OwnedFace>, Option<VMetrics>),
 }
 
 impl fmt::Debug for Font<'_> {
@@ -55,7 +55,7 @@ impl Font<'_> {
         let inner = owned_ttf_parser::Face::from_slice(bytes, index);
         match inner {
             Ok(face) => {
-                Some(Font::Ref(Arc::new(face)))
+                Some(Font::Ref(Arc::new(face), None))
             }
             Err(_) => {
                 None
@@ -77,7 +77,7 @@ impl Font<'_> {
         let inner = owned_ttf_parser::OwnedFace::from_vec(data, index);
         match inner {
             Ok(owned_face) => {
-                Some(Font::Owned(Arc::new(owned_face)))
+                Some(Font::Owned(Arc::new(owned_face), None))
             }
             Err(_) => {
                 None
@@ -92,8 +92,27 @@ impl<'font> Font<'font> {
     pub fn inner(&self) -> &owned_ttf_parser::Face<'_> {
         use owned_ttf_parser::AsFaceRef;
         match self {
-            Self::Ref(f) => f,
-            Self::Owned(f) => f.as_face_ref(),
+            Self::Ref(f,_) => f,
+            Self::Owned(f,_) => f.as_face_ref(),
+        }
+    }
+
+    /// The custom VMetrics should be treated/provided as if they are unscaled.
+    pub fn with_custom_v_metrics(&mut self, v_metrics: VMetrics) {
+        match self {
+            Font::Ref(_, old_v_metrics) |
+            Font::Owned(_, old_v_metrics) => {
+                *old_v_metrics = Some(v_metrics);
+            }
+        }
+    }
+
+    fn custom_v_metrics(&self) -> Option<VMetrics> {
+        match self {
+            Font::Ref(_, v_metrics) |
+            Font::Owned(_, v_metrics) => {
+                v_metrics.clone()
+            }
         }
     }
 
@@ -104,14 +123,23 @@ impl<'font> Font<'font> {
     }
 
     /// Get the unscaled VMetrics for this font, shared by all glyphs.
+    /// If you see that all the metrics are 0, it might be because the
+    /// font you have loaded are not a real TrueType font, but rather
+    /// a sfnt-housed font. To combat this, you can provide your own
+    /// metrics for the font using `custom_v_metrics`.
     /// See `VMetrics` for more detail.
     pub fn v_metrics_unscaled(&self) -> VMetrics {
-        let font = self.inner();
-        VMetrics {
-            ascent: font.ascender() as f32,
-            descent: font.descender() as f32,
-            line_gap: font.line_gap() as f32,
+        if let Some(v_metrics) = self.custom_v_metrics() {
+            v_metrics
+        } else {
+            let font = self.inner();
+            VMetrics {
+                ascent: font.ascender() as f32,
+                descent: font.descender() as f32,
+                line_gap: font.line_gap() as f32,
+            }
         }
+
     }
 
     /// Returns the units per EM square of this font
@@ -255,8 +283,14 @@ impl<'font> Font<'font> {
     /// so if you prefer to measure height by the ascent only, use a similar
     /// calculation.
     pub fn scale_for_pixel_height(&self, height: f32) -> f32 {
-        let inner = self.inner();
-        let fheight = f32::from(inner.ascender()) - f32::from(inner.descender());
-        height / fheight
+        let f_height = if let Some(v_metrics) = self.custom_v_metrics() {
+            v_metrics.ascent - v_metrics.descent
+        } else {
+            let inner = self.inner();
+            f32::from(inner.ascender()) - f32::from(inner.descender())
+        };
+
+
+        height / f_height
     }
 }

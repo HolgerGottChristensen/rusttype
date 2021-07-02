@@ -582,6 +582,6 @@ pub(crate) trait NearZero {
 impl NearZero for f32 {
     #[inline]
     fn is_near_zero(self) -> bool {
-        self.abs() <= core::f32::EPSILON
+        self.abs() <= f32::EPSILON
     }
 }
