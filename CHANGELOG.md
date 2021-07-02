@@ -1,5 +1,6 @@
 ## Unreleased
 * Improve lifetime flexibility for `Font::glyphs_for` & `Font::layout`.
+* Bumped owned_ttf_parser to 0.12.1
 
 ## 0.9.2
 * Update ttf-parser -> `0.6`.
